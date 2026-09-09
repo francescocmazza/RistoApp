@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111111">
+  <meta name="description" content="RistoApp Kitchen Display System">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <title>RistoApp KDS</title>
+</head>
+<body>
+  <header><div><span>RistoApp</span><h1>KDS Cucina</h1></div><div class="header-actions"><span id="connection" class="connection">Non collegato</span><button id="settingsButton" type="button">Configura</button></div></header>
+  <main>
+    <section id="setup" class="setup">
+      <h2>Collega questa postazione</h2>
+      <p>Inserisci il token KDS generato dal back office e la sede che questa schermata deve mostrare. Il token resta solo nella sessione di questo browser.</p>
+      <label>API<input id="apiInput" autocomplete="off" inputmode="url"></label>
+      <label>ID sede<input id="locationInput" autocomplete="off"></label>
+      <label>Token KDS<input id="tokenInput" autocomplete="off" type="password"></label>
+      <button id="connectButton" class="primary" type="button">Collega KDS</button>
+      <p id="setupError" class="error"></p>
+    </section>
+    <section id="board" hidden>
+      <div class="board-head"><strong id="queueCount">0 ordini</strong><span>Aggiornamento automatico</span></div>
+      <div id="orders" class="orders"></div>
+      <div id="empty" class="empty" hidden><strong>Nessun ordine in coda</strong><span>Gli ordini pagati compariranno qui automaticamente.</span></div>
+    </section>
+  </main>
+  <template id="orderTemplate">
+    <article class="ticket">
+      <div class="ticket-head"><div><strong class="table"></strong><small class="time"></small></div><span class="status"></span></div>
+      <div class="items"></div>
+      <button class="next primary" type="button"></button>
+    </article>
+  </template>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

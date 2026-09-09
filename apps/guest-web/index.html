@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="Ordina e paga dal tavolo con RistoApp">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <title>RistoApp</title>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <span class="brand">RistoApp</span>
+      <strong id="restaurantName">Il tuo tavolo</strong>
+      <small id="tableLabel"></small>
+    </div>
+    <button id="cartButton" class="cart-button" type="button" aria-label="Apri carrello">Carrello <span id="cartCount">0</span></button>
+  </header>
+
+  <main>
+    <section id="setup" class="panel setup-panel">
+      <h1>Apri il menu</h1>
+      <p>Normalmente questa schermata viene aperta direttamente dal QR sul tavolo.</p>
+      <label>Indirizzo API<input id="apiInput" inputmode="url" autocomplete="off"></label>
+      <label>ID QR tavolo<input id="qrInput" autocomplete="off"></label>
+      <button id="openMenuButton" class="primary" type="button">Apri menu</button>
+    </section>
+
+    <section id="menuView" hidden>
+      <div id="statusBanner" class="status-banner" hidden></div>
+      <div id="menu"></div>
+    </section>
+
+    <section id="orderView" class="panel" hidden>
+      <p class="eyebrow">ORDINE INVIATO</p>
+      <h1 id="orderTitle">Grazie</h1>
+      <div id="orderStatus" class="order-status"></div>
+      <button id="backToMenu" class="secondary" type="button">Torna al menu</button>
+    </section>
+  </main>
+
+  <dialog id="cartDialog">
+    <div class="dialog-head"><h2>Il tuo ordine</h2><button id="closeCart" class="icon-button" type="button" aria-label="Chiudi">×</button></div>
+    <div id="cartLines"></div>
+    <div class="total-row"><span>Totale</span><strong id="cartTotal">€0,00</strong></div>
+    <label>Pagamento<select id="paymentMethod"></select></label>
+    <p id="checkoutHint" class="hint"></p>
+    <button id="checkoutButton" class="primary full" type="button">Ordina e paga</button>
+  </dialog>
+
+  <template id="itemTemplate">
+    <article class="menu-item">
+      <div class="menu-item-copy"><h3></h3><p></p><strong class="price"></strong></div>
+      <div class="quantity"><button data-action="minus" type="button" aria-label="Riduci">−</button><span>0</span><button data-action="plus" type="button" aria-label="Aggiungi">+</button></div>
+    </article>
+  </template>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

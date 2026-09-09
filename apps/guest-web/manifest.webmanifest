@@ -1,0 +1,10 @@
+{
+  "name": "RistoApp",
+  "short_name": "RistoApp",
+  "description": "Menu, ordine e pagamento al tavolo",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f6f5f2",
+  "theme_color": "#ffffff",
+  "icons": [{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
