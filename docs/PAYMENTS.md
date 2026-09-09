@@ -2,70 +2,153 @@
 
 Status: design draft
 
-RistoApp uses a provider-agnostic payment orchestration layer. Each restaurant should receive funds directly through its own merchant account whenever possible; RistoApp should not hold merchant funds by default.
+## Core principle
 
-## Goals
+RistoApp owns the customer checkout experience. Payment service providers are interchangeable processing engines behind RistoApp APIs/adapters. A customer should browse, order, choose a payment method, confirm payment and receive order status inside the RistoApp ecosystem. Provider-hosted authentication, bank SCA/3DS challenges, wallet approval windows or redirects are allowed only when required by the underlying payment method.
 
-- Multiple payment methods can be enabled per restaurant.
-- Checkout shows only methods available for that merchant, country, currency and device.
-- Payment success is confirmed server-side before an order is released to the kitchen.
-- Refunds, cancellations, captures and asynchronous payment updates use a common internal interface.
-- No single PSP is mandatory; open-source deployments can choose adapters.
+RistoApp must support both anonymous checkout and authenticated customers with reusable payment methods.
 
-## Priority providers for Italy
+## Security and card storage
 
-Tier 1:
-- Cards via a PSP such as Stripe or Nexi XPay
+RistoApp MUST NOT store raw PAN/card number, CVV/CVC or equivalent sensitive authentication data in its application database.
+
+When a customer chooses "save this card", RistoApp stores a provider/vault token or payment-method reference plus safe display metadata such as brand, last four digits and expiry. Sensitive card data remains in a PCI-compliant vault operated by the selected PSP/tokenization provider.
+
+This allows the RistoApp UI to show, for example, `Visa •••• 4242`, while future payments are initiated using the saved token.
+
+Explicit consent to save/reuse a payment method must be recorded.
+
+## Customer experience
+
+### Guest
+
+QR -> menu -> cart -> RistoApp checkout -> payment -> kitchen -> receipt/status
+
+No registration required.
+
+### Registered customer
+
+QR -> identified RistoApp session -> menu -> cart -> select saved payment method -> confirm -> kitchen
+
+The account may retain:
+
+- customer identity/profile
+- order history across restaurants
+- receipts
+- favourite restaurants/items
+- dietary preferences and other user-controlled preferences
+- loyalty data
+- saved delivery/contact data when relevant
+- tokenized payment methods
+- payment preferences
+
+## Platform wallet model
+
+RistoApp should maintain its own logical `Wallet` abstraction. A wallet item is not a card record: it is a reference to a payment credential held by a compliant payment provider or wallet provider.
+
+Suggested model:
+
+- `Customer`
+- `Wallet`
+- `PaymentInstrument`
+- `ProviderCredentialRef`
+- `MerchantPaymentConnection`
+- `PaymentAttempt`
+- `Payment`
+- `Refund`
+
+A `PaymentInstrument` can represent card, PayPal, Satispay, Amazon Pay or another supported instrument. Provider-specific tokens stay behind the adapter boundary.
+
+## Cross-restaurant reuse
+
+Where a PSP and the merchant/platform agreement allow it, a customer payment credential should be saved at platform level and reused across participating restaurants. Where provider rules require merchant-level storage, the adapter must hide that detail and maintain the mapping between the RistoApp wallet instrument and merchant-specific provider token(s).
+
+The application must not assume that every payment method can be reused identically across every merchant/provider.
+
+## Payment methods for Italy
+
+Priority A:
+
+- Cards
 - Apple Pay
 - Google Pay
-- PayPal Checkout
+- PayPal
 - Satispay
 
-Tier 2:
+Priority B:
+
 - Klarna
 - Amazon Pay
-- MyBank / bank redirect
-- Additional Italian and European methods as demand requires
+- Nexi / XPay and other common Italian acquiring options
+- MyBank / bank redirect and additional European methods where useful
+
+## Provider-agnostic checkout
+
+The RistoApp checkout UI calls only RistoApp APIs. It does not encode provider-specific business logic.
+
+Example internal flow:
+
+1. `POST /checkout/sessions`
+2. RistoApp resolves restaurant, amount, customer/guest and available methods.
+3. `GET /checkout/sessions/{id}/payment-methods`
+4. Customer chooses card/wallet/payment method in RistoApp UI.
+5. `POST /checkout/sessions/{id}/confirm`
+6. Payment Orchestrator selects the provider adapter and creates/confirms the provider-side payment.
+7. Required customer actions (3DS, PayPal approval, Satispay flow, Klarna UI, Amazon Pay approval) are surfaced inside or on top of the RistoApp checkout whenever the provider supports it.
+8. Provider server-side event is verified.
+9. RistoApp marks payment `PAID`.
+10. Only then is the order released to KDS/kitchen.
 
 ## Adapter contract
 
-A PaymentProvider adapter should expose at least:
+A `PaymentProvider` adapter should expose at least:
 
-- capabilities()
-- createPayment()
-- getPaymentStatus()
-- capturePayment()
-- cancelPayment()
-- refundPayment()
-- verifyWebhook()
-- normalizeWebhookEvent()
+- `capabilities()`
+- `createCustomerBinding()`
+- `createPayment()`
+- `confirmPayment()`
+- `getPaymentStatus()`
+- `capturePayment()`
+- `cancelPayment()`
+- `refundPayment()`
+- `createSetup()` / `saveInstrument()` where supported
+- `deleteSavedInstrument()`
+- `verifyWebhook()`
+- `normalizeWebhookEvent()`
 
 Optional capabilities:
 
 - partial capture
 - partial refund
 - delayed capture / funds lock
-- recurring authorization
-- marketplace / connected-account onboarding
+- recurring/off-session authorization
+- platform-level vaulting
+- merchant-level vaulting
+- connected-account onboarding
 
 ## Core states
 
-CREATED -> REQUIRES_ACTION -> PROCESSING -> PAID
-                                 |-> FAILED
-PAID -> PARTIALLY_REFUNDED -> REFUNDED
-PAID -> CANCELLED only where the provider/payment lifecycle allows it.
+`CREATED -> REQUIRES_ACTION -> PROCESSING -> PAID`
 
-RistoApp must never dispatch an order solely because the browser returned to a success URL. The authoritative transition to PAID must come from a verified server-side provider response or webhook/callback, with idempotency protection.
+Failure paths include `FAILED`, `CANCELLED`, `EXPIRED`.
+
+Refund paths include `PARTIALLY_REFUNDED` and `REFUNDED`.
+
+RistoApp must never dispatch an order solely because the browser returned to a success URL. The authoritative transition to `PAID` must come from a verified server-side provider response or webhook/callback, protected by idempotency.
 
 ## Merchant settlement
 
-Preferred model: merchant-direct settlement. Each restaurant connects its own payment account and receives payouts from the PSP directly. RistoApp stores only the connection/configuration needed to initiate and reconcile payments. This reduces platform custody of funds and avoids making RistoApp the default settlement intermediary.
+The customer experience being owned by RistoApp does NOT require RistoApp to custody restaurant funds.
+
+Preferred baseline: merchant-direct settlement where technically and contractually available. Each restaurant connects/creates an eligible merchant account and the PSP pays that restaurant directly. RistoApp orchestrates the checkout and can potentially collect a platform/application fee where the provider supports that model.
+
+Alternative settlement models may be supported later, but they require separate legal, regulatory, tax, chargeback and risk analysis.
 
 ## Integration strategy
 
-Use two layers:
+Use both:
 
-1. Aggregator adapters for fast coverage (for example Stripe can expose cards, wallets and supported local methods from one integration).
-2. Direct adapters for strategic methods such as PayPal, Satispay or providers a restaurant already contracts with.
+1. PSP/aggregator adapters for broad card/wallet coverage.
+2. Direct adapters for strategic payment methods such as PayPal, Satispay, Klarna, Amazon Pay, Nexi or others.
 
-This keeps the project open, avoids PSP lock-in and allows restaurants to choose pricing/contracts.
+This preserves a single RistoApp checkout while avoiding lock-in to one processor.
