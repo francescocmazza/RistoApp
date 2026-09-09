@@ -1,0 +1,360 @@
+openapi: 3.1.0
+info:
+  title: RistoApp HTTP API
+  version: 0.1.0
+  description: Public contract for the first RistoApp table-ordering vertical slice. Private implementation details are intentionally excluded.
+servers:
+  - url: http://localhost:3000
+    description: Local development
+paths:
+  /v1/public/qr/{qrPublicId}/session:
+    post:
+      summary: Start a guest table session from a QR identifier
+      parameters:
+        - $ref: '#/components/parameters/QrPublicId'
+      responses:
+        '201':
+          description: Guest session and menu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GuestSessionStart' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/public/sessions/{sessionId}/menu:
+    get:
+      summary: Get the current menu for an active guest session
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Restaurant menu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Menu' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/public/sessions/{sessionId}/payment-methods:
+    get:
+      summary: List payment methods currently available for the restaurant
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Available provider descriptors
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [methods]
+                properties:
+                  methods:
+                    type: array
+                    items: { $ref: '#/components/schemas/PaymentMethod' }
+  /v1/public/sessions/{sessionId}/checkout:
+    post:
+      summary: Create or return an idempotent checkout for the guest session
+      description: Prices and totals are always recalculated by the server from the restaurant catalogue.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckoutRequest' }
+      responses:
+        '201':
+          description: Order/payment state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/public/sessions/{sessionId}/orders/{orderId}:
+    get:
+      summary: Poll an order belonging to the active guest session
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Current order state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/kds/locations/{locationId}/orders:
+    get:
+      summary: Get active paid kitchen orders for a location
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/LocationId'
+      responses:
+        '200':
+          description: Kitchen queue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items: { $ref: '#/components/schemas/KitchenOrder' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/kds/orders/{orderId}/status:
+    patch:
+      summary: Advance a kitchen order state
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/KitchenStatus' }
+      responses:
+        '200':
+          description: Updated kitchen status
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/backoffice/restaurant:
+    get:
+      summary: Get the restaurant configuration visible to a back-office token
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Restaurant summary }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/backoffice/locations/{locationId}/tables:
+    post:
+      summary: Create a table and its public QR identifier
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/LocationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label: { type: string, maxLength: 60 }
+      responses:
+        '201':
+          description: Table created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  qrPublicId: { type: string, format: uuid }
+                  label: { type: string }
+  /v1/backoffice/locations/{locationId}/kds-token:
+    post:
+      summary: Issue a location-scoped KDS token; the plaintext token is returned only at issuance
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/LocationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 120 }
+      responses:
+        '201': { description: Token issued }
+  /v1/backoffice/categories:
+    post:
+      summary: Create a menu category
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 120 }
+                sortOrder: { type: integer }
+      responses:
+        '201': { description: Category created }
+  /v1/backoffice/items:
+    post:
+      summary: Create a menu item
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, priceMinor, currency]
+              properties:
+                categoryId: { type: string, format: uuid }
+                name: { type: string, maxLength: 160 }
+                description: { type: string, maxLength: 1000 }
+                priceMinor: { type: integer, minimum: 0 }
+                currency: { type: string, minLength: 3, maxLength: 3 }
+      responses:
+        '201': { description: Menu item created }
+  /v1/backoffice/items/{itemId}/availability:
+    patch:
+      summary: Change menu item availability
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [available]
+              properties:
+                available: { type: boolean }
+      responses:
+        '200': { description: Availability updated }
+  /v1/backoffice/tokens:
+    get:
+      summary: List restaurant API tokens without exposing token secrets
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Token metadata }
+  /v1/backoffice/tokens/{tokenId}:
+    delete:
+      summary: Revoke a restaurant API token
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: tokenId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Token revoked }
+  /v1/payments/webhooks/{provider}:
+    post:
+      summary: Receive a provider callback/webhook
+      description: Provider adapters are responsible for authenticating/signature-verifying the raw request before normalizing an event.
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '201': { description: Event accepted or deduplicated }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Scoped restaurant/KDS token. Human account authentication will use a separate future identity contract.
+  parameters:
+    QrPublicId: { name: qrPublicId, in: path, required: true, schema: { type: string, format: uuid } }
+    SessionId: { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    OrderId: { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+    LocationId: { name: locationId, in: path, required: true, schema: { type: string, format: uuid } }
+  schemas:
+    GuestSessionStart:
+      type: object
+      required: [sessionId, expiresAt, restaurant, location, table, menu]
+      properties:
+        sessionId: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time }
+        restaurant: { type: object, properties: { id: {type: string, format: uuid}, name: {type: string}, slug: {type: string} } }
+        location: { type: object, properties: { id: {type: string, format: uuid}, name: {type: string} } }
+        table: { type: object, properties: { id: {type: string, format: uuid}, label: {type: string} } }
+        menu: { $ref: '#/components/schemas/Menu' }
+    Menu:
+      type: object
+      properties:
+        restaurantId: { type: string, format: uuid }
+        categories:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+              items: { type: array, items: { $ref: '#/components/schemas/MenuItem' } }
+        uncategorized: { type: array, items: { $ref: '#/components/schemas/MenuItem' } }
+    MenuItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        priceMinor: { type: integer, minimum: 0 }
+        currency: { type: string }
+    PaymentMethod:
+      type: object
+      properties:
+        key: { type: string }
+        capabilities: { type: object, additionalProperties: true }
+    CheckoutRequest:
+      type: object
+      required: [checkoutKey, items]
+      properties:
+        checkoutKey: { type: string, minLength: 8, maxLength: 128 }
+        paymentMethod: { type: string }
+        savedInstrumentId: { type: string, format: uuid }
+        returnUrl: { type: string, format: uri }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            required: [menuItemId, quantity]
+            properties:
+              menuItemId: { type: string, format: uuid }
+              quantity: { type: integer, minimum: 1, maximum: 20 }
+              notes: { type: string, maxLength: 500 }
+    Order:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        orderStatus: { type: string, enum: [DRAFT, SUBMITTED, COMPLETED, CANCELLED] }
+        paymentStatus: { $ref: '#/components/schemas/PaymentStatus' }
+        kitchenStatus: { $ref: '#/components/schemas/KitchenStatus' }
+        currency: { type: string }
+        totalMinor: { type: integer }
+        createdAt: { type: string, format: date-time }
+        paymentAction: { type: [object, 'null'], additionalProperties: true }
+    PaymentStatus:
+      type: string
+      enum: [UNPAID, REQUIRES_ACTION, PROCESSING, PAID, FAILED, PARTIALLY_REFUNDED, REFUNDED]
+    KitchenStatus:
+      type: string
+      enum: [NOT_DISPATCHED, DISPATCHED, ACKNOWLEDGED, PREPARING, READY, SERVED]
+    KitchenOrder:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        tableLabel: { type: [string, 'null'] }
+        kitchenStatus: { $ref: '#/components/schemas/KitchenStatus' }
+        createdAt: { type: string, format: date-time }
+        totalMinor: { type: integer }
+        currency: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              quantity: { type: integer }
+              notes: { type: [string, 'null'] }
+  responses:
+    BadRequest: { description: Invalid request }
+    Unauthorized: { description: Missing or invalid credentials }
+    Forbidden: { description: Credential is outside resource scope }
+    NotFound: { description: Resource not found or unavailable }
