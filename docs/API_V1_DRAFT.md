@@ -9,10 +9,24 @@ This repository contains public ecosystem contracts, not the private RistoApp-Co
 - `POST /v1/public/sessions/{sessionId}/quote` — request a server-authoritative cart quote.
 - `GET /v1/public/sessions/{sessionId}/payment-methods` — retrieve payment methods enabled for that restaurant.
 - `POST /v1/public/sessions/{sessionId}/checkout` — create an order and start the selected RistoApp payment flow.
+- `GET /v1/public/sessions/{sessionId}/checkouts/{checkoutKey}` — read-only recovery of an already-created checkout after refresh, timeout or uncertain network outcome.
 - `GET /v1/public/sessions/{sessionId}/orders/{orderId}` — retrieve order/payment/kitchen status.
 - `GET /v1/public/restaurants/{slug}` — retrieve public restaurant storefront metadata.
 
 The client submits menu/modifier IDs and quantities. Prices are never authoritative client inputs.
+
+### Checkout idempotency and recovery
+
+`checkoutKey` is an idempotency key scoped to the guest session. Clients should generate it once immediately before the first checkout attempt and retain the same key while recovering that attempt.
+
+The server binds the key to the material checkout intent: payment method, saved payment instrument if present, menu items, quantities, notes and selected modifiers. Harmless ordering differences in cart lines/modifier IDs do not change the intent; the return URL is not part of the intent.
+
+- same key + same intent -> return the existing order;
+- same key + materially different intent -> `409 Conflict`;
+- uncertain client outcome -> call the read-only checkout lookup before any retry;
+- the lookup endpoint never creates an order and never retries a payment.
+
+A client must not silently generate a second checkout key merely because the first HTTP response was lost. If the outcome cannot be established safely, it should surface an uncertain state instead of risking duplicate payment/order creation.
 
 ## Customer profile contract
 

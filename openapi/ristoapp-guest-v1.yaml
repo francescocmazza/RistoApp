@@ -1,0 +1,266 @@
+openapi: 3.1.0
+info:
+  title: RistoApp Guest API
+  version: 0.2.0
+  description: Public guest/table-ordering contract. Private Core implementation details are intentionally excluded.
+servers:
+  - url: http://localhost:3000
+    description: Local development
+paths:
+  /v1/public/qr/{qrPublicId}/session:
+    post:
+      summary: Start a guest table session from a QR identifier
+      parameters:
+        - $ref: '#/components/parameters/QrPublicId'
+      responses:
+        '201':
+          description: Guest session and current menu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GuestSessionStart' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/public/sessions/{sessionId}/menu:
+    get:
+      summary: Get current menu for an active guest session
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Restaurant menu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Menu' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/public/sessions/{sessionId}/payment-methods:
+    get:
+      summary: List payment methods currently available for the restaurant
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Available payment-provider descriptors
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [methods]
+                properties:
+                  methods:
+                    type: array
+                    items: { $ref: '#/components/schemas/PaymentMethod' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/public/sessions/{sessionId}/quote:
+    post:
+      summary: Calculate a server-authoritative cart quote
+      description: Client-supplied prices are not accepted. Item prices, modifier deltas and selection constraints are loaded and validated by RistoApp.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuoteRequest' }
+      responses:
+        '201':
+          description: Authoritative quote
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quote' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/public/sessions/{sessionId}/checkout:
+    post:
+      summary: Create or return an idempotent checkout
+      description: |
+        checkoutKey is scoped to the guest session and bound to the material checkout intent.
+        Same key + same intent returns the existing order. Same key + materially different
+        payment method, saved instrument, items, quantities, notes or modifiers returns 409.
+        Prices and totals are recalculated by the server.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckoutRequest' }
+      responses:
+        '201':
+          description: Order/payment state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/public/sessions/{sessionId}/checkouts/{checkoutKey}:
+    get:
+      summary: Recover an existing checkout after an uncertain client outcome
+      description: Read-only lookup. It does not create an order and does not retry a payment.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CheckoutKey'
+      responses:
+        '200':
+          description: Existing order/payment state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/public/sessions/{sessionId}/orders/{orderId}:
+    get:
+      summary: Get current order/payment/kitchen state
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Current order state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '404': { $ref: '#/components/responses/NotFound' }
+components:
+  parameters:
+    QrPublicId: { name: qrPublicId, in: path, required: true, schema: { type: string, format: uuid } }
+    SessionId: { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    CheckoutKey: { name: checkoutKey, in: path, required: true, schema: { type: string, minLength: 8, maxLength: 128 } }
+    OrderId: { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+  schemas:
+    GuestSessionStart:
+      type: object
+      required: [sessionId, expiresAt, restaurant, location, table, menu]
+      properties:
+        sessionId: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time }
+        restaurant:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            slug: { type: string }
+        location:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        table:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            label: { type: string }
+        menu: { $ref: '#/components/schemas/Menu' }
+    Menu:
+      type: object
+      properties:
+        restaurantId: { type: string, format: uuid }
+        categories:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+              items: { type: array, items: { $ref: '#/components/schemas/MenuItem' } }
+        uncategorized: { type: array, items: { $ref: '#/components/schemas/MenuItem' } }
+    MenuItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        imageUrl: { type: [string, 'null'] }
+        dietaryTags: { type: array, items: { type: string } }
+        priceMinor: { type: integer, minimum: 0 }
+        currency: { type: string }
+        allergens:
+          type: array
+          items:
+            type: object
+            properties:
+              code: { type: string }
+              name: { type: string }
+              euNumber: { type: [integer, 'null'] }
+        modifierGroups:
+          type: array
+          items: { $ref: '#/components/schemas/ModifierGroup' }
+    ModifierGroup:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        minSelect: { type: integer, minimum: 0 }
+        maxSelect: { type: integer, minimum: 1 }
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+              priceDeltaMinor: { type: integer }
+    CartItem:
+      type: object
+      required: [menuItemId, quantity]
+      properties:
+        menuItemId: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 1, maximum: 20 }
+        notes: { type: string, maxLength: 500 }
+        modifierOptionIds:
+          type: array
+          maxItems: 50
+          items: { type: string, format: uuid }
+    QuoteRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: '#/components/schemas/CartItem' }
+    Quote:
+      type: object
+      properties:
+        currency: { type: string }
+        baseSubtotalMinor: { type: integer }
+        modifierTotalMinor: { type: integer }
+        totalMinor: { type: integer }
+        lines:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    PaymentMethod:
+      type: object
+      properties:
+        key: { type: string }
+        capabilities: { type: object, additionalProperties: true }
+    CheckoutRequest:
+      type: object
+      required: [checkoutKey, items]
+      properties:
+        checkoutKey: { type: string, minLength: 8, maxLength: 128 }
+        paymentMethod: { type: string, maxLength: 50 }
+        savedInstrumentId: { type: string, format: uuid }
+        returnUrl: { type: string, format: uri }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: '#/components/schemas/CartItem' }
+    Order:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        orderStatus: { type: string, enum: [DRAFT, SUBMITTED, COMPLETED, CANCELLED] }
+        paymentStatus: { type: string, enum: [UNPAID, REQUIRES_ACTION, PROCESSING, PAID, FAILED, PARTIALLY_REFUNDED, REFUNDED] }
+        kitchenStatus: { type: string, enum: [NOT_DISPATCHED, DISPATCHED, ACKNOWLEDGED, PREPARING, READY, SERVED] }
+        currency: { type: string }
+        totalMinor: { type: integer }
+        createdAt: { type: string, format: date-time }
+        items: { type: array, items: { type: object, additionalProperties: true } }
+        paymentAction: { type: [object, 'null'], additionalProperties: true }
+  responses:
+    BadRequest: { description: Invalid request }
+    Conflict: { description: Checkout key is already bound to a different checkout intent }
+    NotFound: { description: Resource not found or unavailable }
