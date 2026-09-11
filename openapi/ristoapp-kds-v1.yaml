@@ -1,0 +1,141 @@
+openapi: 3.1.0
+info:
+  title: RistoApp KDS API
+  version: 0.2.0
+  description: Public station-aware kitchen display contract.
+servers:
+  - url: http://localhost:3000
+paths:
+  /v1/kds/locations/{locationId}/orders:
+    get:
+      summary: List active paid preparation-station tickets
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/LocationId'
+        - $ref: '#/components/parameters/Station'
+      responses:
+        '200':
+          description: Current ticket queue
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tickets]
+                properties:
+                  tickets:
+                    type: array
+                    items: { $ref: '#/components/schemas/StationTicket' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/kds/locations/{locationId}/orders/events:
+    get:
+      summary: Stream active station-ticket snapshots with SSE
+      description: |
+        Requires Authorization bearer header. Do not put the token in the query string.
+        Event `kds` carries the same object shape as the REST queue response; `heartbeat`
+        is emitted periodically. Implementations may reconnect or fall back to REST polling.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/LocationId'
+        - $ref: '#/components/parameters/Station'
+      responses:
+        '200':
+          description: text/event-stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/kds/orders/{orderId}/stations/{stationCode}/status:
+    patch:
+      summary: Advance one preparation-station ticket
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/StationCode'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/KitchenStatus' }
+      responses:
+        '200':
+          description: Updated station ticket state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orderId: { type: string, format: uuid }
+                  stationCode: { type: string }
+                  status: { $ref: '#/components/schemas/KitchenStatus' }
+        '400': { description: Invalid state transition }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    LocationId:
+      name: locationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    StationCode:
+      name: stationCode
+      in: path
+      required: true
+      schema: { type: string }
+    Station:
+      name: station
+      in: query
+      required: false
+      schema: { type: string }
+  schemas:
+    KitchenStatus:
+      type: string
+      enum: [DISPATCHED, ACKNOWLEDGED, PREPARING, READY, SERVED]
+    StationTicket:
+      type: object
+      required: [orderId, stationCode, status, createdAt, totalMinor, currency, items]
+      properties:
+        orderId: { type: string, format: uuid }
+        tableLabel: { type: [string, 'null'] }
+        stationCode: { type: string }
+        status: { $ref: '#/components/schemas/KitchenStatus' }
+        createdAt: { type: string, format: date-time }
+        totalMinor: { type: integer }
+        currency: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            required: [name, quantity, modifiers]
+            properties:
+              name: { type: string }
+              quantity: { type: integer, minimum: 1 }
+              notes: { type: [string, 'null'] }
+              modifiers:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    group: { type: string }
+                    option: { type: string }
+  responses:
+    Unauthorized: { description: Missing or invalid KDS bearer token }
+    Forbidden: { description: Token is outside restaurant/location scope }
+    NotFound: { description: Location, station or ticket not found }
