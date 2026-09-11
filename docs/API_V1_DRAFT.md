@@ -11,6 +11,7 @@ This repository contains public ecosystem contracts, not the private RistoApp-Co
 - `POST /v1/public/sessions/{sessionId}/checkout` — create an order and start the selected RistoApp payment flow.
 - `GET /v1/public/sessions/{sessionId}/checkouts/{checkoutKey}` — read-only recovery of an already-created checkout after refresh, timeout or uncertain network outcome.
 - `GET /v1/public/sessions/{sessionId}/orders/{orderId}` — retrieve order/payment/kitchen status.
+- `GET /v1/public/sessions/{sessionId}/orders/{orderId}/events` — SSE stream of order-state changes plus heartbeat events.
 - `GET /v1/public/restaurants/{slug}` — retrieve public restaurant storefront metadata.
 
 The client submits menu/modifier IDs and quantities. Prices are never authoritative client inputs.
@@ -27,6 +28,10 @@ The server binds the key to the material checkout intent: payment method, saved 
 - the lookup endpoint never creates an order and never retries a payment.
 
 A client must not silently generate a second checkout key merely because the first HTTP response was lost. If the outcome cannot be established safely, it should surface an uncertain state instead of risking duplicate payment/order creation.
+
+### Guest realtime
+
+The guest order SSE route emits `order` events only when the order snapshot changes and `heartbeat` events periodically. The stream is scoped by the same guest session used by the REST order endpoint. REST polling remains a valid fallback and the database state remains authoritative.
 
 ## Customer profile contract
 
@@ -65,6 +70,20 @@ Paid orders are routed by preparation station. A restaurant may operate separate
 - `dessert`
 
 Station states advance independently and are aggregated into the customer-visible order state.
+
+Current station-aware KDS routes:
+
+- `GET /v1/kds/locations/{locationId}/orders?station={stationCode}` — current paid station tickets;
+- `GET /v1/kds/locations/{locationId}/orders/events?station={stationCode}` — authenticated SSE stream of the same ticket set;
+- `PATCH /v1/kds/orders/{orderId}/stations/{stationCode}/status` — advance one station ticket.
+
+KDS endpoints require a bearer token scoped to the restaurant/location. The token must be sent in the `Authorization` header, never as a URL query parameter. Browser KDS clients therefore use streaming `fetch` rather than native `EventSource`.
+
+Ticket state progression is:
+
+`DISPATCHED -> ACKNOWLEDGED -> PREPARING -> READY -> SERVED`
+
+The aggregate order kitchen state is derived from all station tickets.
 
 ## Fulfillment / printer contract
 
