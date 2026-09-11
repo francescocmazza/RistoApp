@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "project_id": "ristoapp",
+  "display_name": "RistoApp",
+  "workspace": {
+    "type": "git",
+    "expected_repository": "francescocmazza/RistoApp"
+  },
+  "state_namespace": "ristoapp",
+  "prompts": {
+    "common": ".agent-platform/prompts/common.md",
+    "role_dir": ".agent-platform/prompts"
+  },
+  "missions": {
+    "workspace-smoke": ".agent-platform/missions/workspace-smoke.json"
+  },
+  "resource_policy": {
+    "allowed": ["pc_a", "pc_b"],
+    "max_parallel_tasks": 2,
+    "role_preferences": {
+      "gm": ["pc_a", "pc_b"],
+      "marketing": ["pc_a", "pc_b"],
+      "reviewer": ["pc_b", "pc_a"]
+    }
+  },
+  "quality": {
+    "inherit_required": true
+  },
+  "execution": {
+    "enabled": false
+  },
+  "outbound": {
+    "telegram": false,
+    "reporting": false
+  }
+}
