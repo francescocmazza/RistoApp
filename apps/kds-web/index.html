@@ -18,14 +18,15 @@
       <p>Inserisci il token KDS generato dal back office e la sede che questa schermata deve mostrare. Il token resta solo nella sessione di questo browser.</p>
       <label>API<input id="apiInput" autocomplete="off" inputmode="url"></label>
       <label>ID sede<input id="locationInput" autocomplete="off"></label>
+      <label>Stazione (opzionale)<input id="stationInput" autocomplete="off" placeholder="es. kitchen, bar, pizza"></label>
       <label>Token KDS<input id="tokenInput" autocomplete="off" type="password"></label>
       <button id="connectButton" class="primary" type="button">Collega KDS</button>
       <p id="setupError" class="error"></p>
     </section>
     <section id="board" hidden>
-      <div class="board-head"><strong id="queueCount">0 ordini</strong><span>Aggiornamento automatico</span></div>
+      <div class="board-head"><strong id="queueCount">0 ticket</strong><span id="boardMode">Aggiornamento realtime</span></div>
       <div id="orders" class="orders"></div>
-      <div id="empty" class="empty" hidden><strong>Nessun ordine in coda</strong><span>Gli ordini pagati compariranno qui automaticamente.</span></div>
+      <div id="empty" class="empty" hidden><strong>Nessun ticket in coda</strong><span>Gli ordini pagati compariranno qui automaticamente.</span></div>
     </section>
   </main>
   <template id="orderTemplate">
