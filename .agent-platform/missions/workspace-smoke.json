@@ -1,0 +1,18 @@
+[
+  {
+    "id": "WORKSPACE-SMOKE-1",
+    "title": "RistoApp WorkSpace launch-readiness smoke",
+    "role": "gm",
+    "goal": "Read the public README and produce a concise, evidence-based snapshot of RistoApp's current product promise, likely launch audience, immediate launch-readiness gaps and the next three concrete operating actions. Do not invent product capabilities or traction.",
+    "acceptance": [
+      "[AC1] Ground the summary in the repository README and clearly separate facts from assumptions.",
+      "[AC2] Identify concrete launch-readiness gaps rather than generic startup advice.",
+      "[AC3] End with exactly three prioritized next actions that can feed the next WorkSpace cycle."
+    ],
+    "depends_on": [],
+    "inputs": ["README.md"],
+    "classification": "GREEN",
+    "cloud_approved": false,
+    "priority": 50
+  }
+]
